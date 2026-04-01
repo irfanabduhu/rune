@@ -1,0 +1,19 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "irfanabduhu",
+  "description": "Creative writing and reading tools for Claude Code",
+  "owner": {
+    "name": "Irfanul Hoque"
+  },
+  "plugins": [
+    {
+      "name": "fablesmith",
+      "description": "Generate creative fiction in markdown, mimicking specific authors' styles. Includes /tale (short story), /tales (story collection), /saga (novella), /novel (full novel), /play (theatrical play), /verse (poetry collection), and /fable (fable/parable) commands.",
+      "author": {
+        "name": "Irfanul Hoque"
+      },
+      "source": "./",
+      "category": "creativity"
+    }
+  ]
+}
