@@ -1,0 +1,8 @@
+# Superpowers process artifacts — design specs, plans, and SDD scratch.
+# Kept locally for reference; never part of the published plugins.
+docs/superpowers/
+.superpowers/
+
+# Python bytecode
+__pycache__/
+*.pyc
