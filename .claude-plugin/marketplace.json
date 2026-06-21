@@ -50,6 +50,15 @@
       },
       "source": "./codemonk",
       "category": "education"
+    },
+    {
+      "name": "shamelaweave",
+      "description": "Voweled, bilingual study editions of Maktabat al-Shamela books, with a self-contained HTML reader.",
+      "author": {
+        "name": "Irfanul Hoque"
+      },
+      "source": "./shamelaweave",
+      "category": "education"
     }
   ]
 }
