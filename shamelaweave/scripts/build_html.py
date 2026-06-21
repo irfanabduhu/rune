@@ -5,12 +5,15 @@ Usage:
     python3 build_html.py <book_dir> [output.html]
 
 Reads README.md (title/author/source) and every NN-*.md chapter file in the folder,
-parses the shamelaweave markdown shape (## optional subheading / **[n]** ⟨صP⟩ marker /
-> Arabic / English / *Notes:*), and writes a single offline HTML file with:
+parses the shamelaweave markdown shape (## optional subheading / ⟨صP⟩ page marker /
+> Arabic / English / Bengali / *Notes:*), and writes a single offline HTML file with:
   - light/dark theme (system default + manual toggle, persisted)
-  - RTL Arabic naskh typography, English serif body, rubricated structural markers
+  - RTL Arabic naskh typography, English + Bengali serif bodies, rubricated markers
   - print-page numbers floated in the margin (hidden on narrow screens)
-  - a view switch (Both / العربية / English) and a contents drawer with a page index
+  - a view switch (All / العربية / English / বাংলা) and a contents drawer with a page index
+
+Units are delimited by their ⟨صP⟩ page marker; there are no unit numbers. English and
+Bengali are routed by script, so their order in the source is not load-bearing.
 
 No external assets, no dependencies — everything is inlined so the file works offline.
 """
@@ -18,6 +21,11 @@ import sys, os, re, glob, html
 
 
 # ---------- markdown parsing (specialised to the shamelaweave format) ----------
+
+BENGALI = re.compile(r"[ঀ-৿]")
+# unit marker:  ⟨ص11⟩  or  ⟨ص11–12⟩  optionally followed by an Arabic title
+PAGE_RE = re.compile(r"^⟨\s*ص\s*([^⟩]+?)\s*⟩\s*(.*)$")
+
 
 def inline(text):
     """Escape, then apply the small subset of markdown our files use."""
@@ -50,10 +58,6 @@ def parse_readme(path):
     return meta
 
 
-# unit marker:  **[7]** ⟨ص11⟩  or  **[7]** ⟨ص11–12⟩  optionally followed by a title
-UNIT_RE = re.compile(r"^\*\*\[(\d+)\]\*\*\s*(?:⟨\s*ص\s*([^⟩]+?)\s*⟩)?\s*(.*)$")
-
-
 def parse_chapter(path):
     title, source = None, None
     blocks = []
@@ -76,13 +80,12 @@ def parse_chapter(path):
             push()
             blocks.append({"kind": "heading", "text": line[3:].strip()})
             awaiting_ar = False; continue
-        m = UNIT_RE.match(line)
+        m = PAGE_RE.match(line)
         if m:
             push()
-            cur = {"kind": "unit", "n": m.group(1),
-                   "page": (m.group(2) or "").strip(),
-                   "title": m.group(3).strip(),
-                   "ar": "", "en": "", "notes": ""}
+            cur = {"kind": "unit", "page": m.group(1).strip(),
+                   "title": m.group(2).strip(),
+                   "ar": "", "en": "", "bn": "", "notes": ""}
             awaiting_ar = True; continue
         if line.startswith("> "):
             content = line[2:]
@@ -95,14 +98,15 @@ def parse_chapter(path):
             if cur is not None:
                 cur["notes"] = line[len("*Notes:*"):].strip()
             continue
-        if cur is not None:
-            cur["en"] = (cur["en"] + " " + line).strip() if cur["en"] else line
+        if cur is not None:                       # a translation paragraph
+            key = "bn" if BENGALI.search(line) else "en"
+            cur[key] = (cur[key] + " " + line).strip() if cur[key] else line
     push()
     return {"title": title, "source": source, "blocks": blocks}
 
 
 def split_title(title):
-    """'Test Chapter — [باب الاختبار]' -> ('Test Chapter', '[باب الاختبار]')."""
+    """'Al-Adab al-Ṣaghīr — [الأدب الصغير]' -> ('Al-Adab al-Ṣaghīr', '[الأدب الصغير]')."""
     if not title:
         return ("", "")
     m = re.match(r"^(.*?)\s*[—-]\s*(\[.*\])\s*$", title)
@@ -118,6 +122,7 @@ CSS = r"""
   --rubric:#A8322D; --lapis:#28456C; --rule:#E7E1D5; --rule-strong:#D2C9B8;
   --ar-size:1.6rem;
   --ar-font:'Amiri','Scheherazade New','Noto Naskh Arabic','Traditional Arabic','Geeza Pro',serif;
+  --bn-font:'Noto Serif Bengali','Kalpurush','Siyam Rupali','Vrinda','Nirmala UI',serif;
   --en-serif:'Iowan Old Style','Palatino Linotype','Palatino','Georgia','Times New Roman',serif;
   --label:ui-sans-serif,-apple-system,'Segoe UI',system-ui,'Helvetica Neue',sans-serif;
 }
@@ -139,7 +144,6 @@ header{position:sticky;top:0;z-index:30;
   backdrop-filter:saturate(1.1) blur(8px);border-bottom:1px solid var(--rule)}
 header .brand{font-family:var(--ar-font);font-size:1.15rem;color:var(--text);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
-header .spacer{flex:1}
 .ctrl{font-family:var(--label);font-size:.8rem;color:var(--text);
   background:transparent;border:1px solid var(--rule-strong);border-radius:.4rem;
   padding:.32rem .55rem;cursor:pointer;line-height:1;transition:.15s}
@@ -203,20 +207,20 @@ main{max-width:50rem;margin:0 auto;padding:0 clamp(1rem,4vw,2rem) 6rem}
   direction:rtl;text-align:right;margin:2.2rem 0 .6rem;font-weight:700}
 
 /* unit */
-.unit{margin:1.6rem 0;position:relative}
-.unit .num{font-family:var(--label);font-size:.72rem;color:var(--rubric);
-  letter-spacing:.05em;display:block;text-align:end;margin-bottom:.15rem}
+.unit{margin:1.8rem 0;position:relative;padding-top:.2rem;
+  border-top:1px solid color-mix(in srgb,var(--rule) 70%,transparent)}
+.unit:first-of-type{border-top:0}
 /* print-page number floated into the margin; hidden when there is no gutter */
-.pg-tag{position:absolute;inset-inline-start:-3.6rem;top:.15rem;
+.pg-tag{position:absolute;inset-inline-start:-3.6rem;top:.7rem;
   font-family:var(--label);font-size:.7rem;color:var(--muted);
   letter-spacing:.03em;direction:rtl;white-space:nowrap;user-select:none}
 @media (max-width:60rem){.pg-tag{display:none}}
 .u-title{font-family:var(--ar-font);font-size:1.2rem;font-weight:700;color:var(--rubric);
   direction:rtl;text-align:right;margin:0 0 .35rem}
-body.view-en .u-title{display:none}
 .u-ar{font-family:var(--ar-font);font-size:var(--ar-size);line-height:2.05;
-  direction:rtl;text-align:right;color:var(--text);margin:0}
+  direction:rtl;text-align:right;color:var(--text);margin:.4rem 0 0}
 .u-en{margin:.7rem 0 0;color:var(--text)}
+.u-bn{font-family:var(--bn-font);line-height:1.9;margin:.7rem 0 0;color:var(--text)}
 .u-notes{font-family:var(--en-serif);font-size:.9rem;color:var(--muted);
   border-inline-start:2px solid color-mix(in srgb,var(--rubric) 55%,transparent);
   padding-inline-start:.85rem;margin:.7rem 0 0}
@@ -224,10 +228,10 @@ body.view-en .u-title{display:none}
   letter-spacing:.12em;color:var(--rubric);display:block;margin-bottom:.15rem}
 .u-notes em{font-style:italic}
 
-/* view modes */
-body.view-ar .u-en,body.view-ar .u-notes{display:none}
-body.view-en .u-ar{display:none}
-body.view-en .unit .num{text-align:start}
+/* view modes: default shows all three; each view isolates one language */
+body.view-ar .u-en,body.view-ar .u-bn,body.view-ar .u-notes{display:none}
+body.view-en .u-ar,body.view-en .u-bn,body.view-en .u-title{display:none}
+body.view-bn .u-ar,body.view-bn .u-en,body.view-bn .u-title,body.view-bn .u-notes{display:none}
 
 a{color:var(--lapis)}
 .totop{position:fixed;inset-inline-end:1rem;bottom:1rem;z-index:20;
@@ -245,8 +249,8 @@ const KEY_T='shamela-theme', KEY_V='shamela-view';
 function setTheme(t){root.setAttribute('data-theme',t);
   try{localStorage.setItem(KEY_T,t)}catch(e){}
   document.getElementById('theme').textContent = t==='dark' ? '☀ Light' : '☾ Dark';}
-function setView(v){body.classList.remove('view-ar','view-en');
-  if(v!=='both') body.classList.add('view-'+v);
+function setView(v){body.classList.remove('view-ar','view-en','view-bn');
+  if(v!=='all') body.classList.add('view-'+v);
   try{localStorage.setItem(KEY_V,v)}catch(e){}
   document.querySelectorAll('.seg button').forEach(b=>
     b.setAttribute('aria-pressed', b.dataset.view===v ? 'true':'false'));}
@@ -263,7 +267,7 @@ toc.addEventListener('click',e=>{if(e.target.closest('a'))closeToc()});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeToc()});
 const totop=document.getElementById('totop');
 addEventListener('scroll',()=>totop.classList.toggle('show',scrollY>800),{passive:true});
-setView((()=>{try{return localStorage.getItem(KEY_V)||'both'}catch(e){return 'both'}})());
+setView((()=>{try{return localStorage.getItem(KEY_V)||'all'}catch(e){return 'all'}})());
 """
 
 PRELUDE = r"""(function(){try{var t=localStorage.getItem('shamela-theme');
@@ -279,6 +283,12 @@ def build(book_dir, out_path):
     for f in files:
         ch = parse_chapter(f)
         ch["id"] = re.sub(r"[^a-z0-9]+", "-", os.path.basename(f)[:-3].lower()).strip("-")
+        # assign a stable per-chapter index to each unit for anchors
+        i = 0
+        for b in ch["blocks"]:
+            if b["kind"] == "unit":
+                i += 1
+                b["uid"] = f'{ch["id"]}--u{i}'
         chapters.append(ch)
 
     # ---- contents drawer (chapters + a page index built from unit tags) ----
@@ -291,7 +301,7 @@ def build(book_dir, out_path):
             if b["kind"] != "unit" or not b["page"]:
                 continue
             if b["page"] != last:
-                pages.append(f'<a class="pg" href="#{ch["id"]}--u{b["n"]}">{inline("ص"+b["page"])}</a>')
+                pages.append(f'<a class="pg" href="#{b["uid"]}">{inline("ص"+b["page"])}</a>')
                 last = b["page"]
         if pages:
             toc_html.append('<div class="pages">' + "".join(pages) + "</div>")
@@ -327,16 +337,17 @@ def build(book_dir, out_path):
                 body_parts.append(f'<h3 class="subhead" lang="ar" dir="rtl">{inline(b["text"])}</h3>')
                 continue
             u = b
-            parts = [f'<div class="unit" id="{ch["id"]}--u{u["n"]}">']
+            parts = [f'<div class="unit" id="{u["uid"]}">']
             if u["page"]:
                 parts.append(f'<span class="pg-tag" aria-hidden="true">{inline("ص"+u["page"])}</span>')
-            parts.append(f'<span class="num">{html.escape(u["n"])}</span>')
             if u.get("title"):
                 parts.append(f'<p class="u-title" lang="ar" dir="rtl">{inline(u["title"])}</p>')
             if u["ar"]:
                 parts.append(f'<p class="u-ar" lang="ar" dir="rtl">{inline(u["ar"])}</p>')
             if u["en"]:
                 parts.append(f'<p class="u-en">{inline(u["en"])}</p>')
+            if u["bn"]:
+                parts.append(f'<p class="u-bn" lang="bn">{inline(u["bn"])}</p>')
             if u["notes"]:
                 parts.append(f'<aside class="u-notes"><span class="lbl">Notes</span>{inline(u["notes"])}</aside>')
             parts.append("</div>")
@@ -360,9 +371,10 @@ def build(book_dir, out_path):
 <button class="ctrl" id="menu" aria-label="Contents">☰ Contents</button>
 <span class="brand">{inline(brand)}</span>
 <span class="seg" role="group" aria-label="View">
-<button data-view="both" aria-pressed="true">Both</button>
+<button data-view="all" aria-pressed="true">All</button>
 <button data-view="ar" lang="ar">العربية</button>
 <button data-view="en">English</button>
+<button data-view="bn" lang="bn">বাংলা</button>
 </span>
 <button class="ctrl" id="theme">☾ Dark</button>
 </header>

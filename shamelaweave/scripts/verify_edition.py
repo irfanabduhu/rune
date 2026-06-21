@@ -1,35 +1,67 @@
 #!/usr/bin/env python3
-"""Check a shamelaweave book folder conforms to the logical-paragraph format.
+"""Check a shamelaweave book folder conforms to the trilingual format.
 
 Usage: python3 verify_edition.py <book_dir>
 
-Fails (exit 1) if any chapter file has '## ص' page-divider headers, units that
-are not numbered 1..N contiguously, or a unit missing its ⟨صN⟩ page tag.
+Each unit starts with a ⟨صN⟩ page marker (the delimiter — there are no unit
+numbers), then a voweled Arabic blockquote, an English paragraph, and a Bengali
+paragraph (notes optional). Fails (exit 1) if any chapter has '## ص' page-divider
+headers, a range tag using an ASCII hyphen instead of the en dash, or a unit
+missing its Arabic, English, or Bengali.
 """
 import sys, os, re, glob
 
-UNIT = re.compile(r"^\*\*\[(\d+)\]\*\*\s*(⟨\s*ص\s*[^⟩]+⟩)?")
+PAGE = re.compile(r"^⟨\s*ص\s*([^⟩]+?)\s*⟩")
+BENGALI = re.compile(r"[ঀ-৿]")
 
 
 def check_file(path):
-    errs, nums, lineno = [], [], 0
+    errs, nunits = [], 0
     base = os.path.basename(path)
-    for raw in open(path, encoding="utf-8"):
-        lineno += 1
+    cur = None          # (start_lineno, page, has_ar, has_en, has_bn)
+    awaiting_ar = False
+
+    def close(u):
+        if not u:
+            return
+        ln, page, ar, en, bn = u
+        if not ar:
+            errs.append(f"{base}:{ln}: unit ⟨ص{page}⟩ missing Arabic")
+        if not en:
+            errs.append(f"{base}:{ln}: unit ⟨ص{page}⟩ missing English")
+        if not bn:
+            errs.append(f"{base}:{ln}: unit ⟨ص{page}⟩ missing Bengali")
+
+    for lineno, raw in enumerate(open(path, encoding="utf-8"), 1):
         line = raw.rstrip("\n")
+        if not line.strip():
+            continue
         if re.match(r"^##\s*ص", line):
             errs.append(f"{base}:{lineno}: page-divider header '{line.strip()}'")
-        m = UNIT.match(line)
+            continue
+        m = PAGE.match(line)
         if m:
-            nums.append(int(m.group(1)))
-            if not m.group(2):
-                errs.append(f"{base}:{lineno}: unit [{m.group(1)}] missing ⟨ص…⟩ page tag")
-            elif re.search(r"\d-\d", m.group(2)):
-                errs.append(f"{base}:{lineno}: unit [{m.group(1)}] range tag uses ASCII hyphen; use en dash – (U+2013)")
-    expected = list(range(1, len(nums) + 1))
-    if nums != expected:
-        errs.append(f"{base}: units not contiguous 1..{len(nums)} (got {nums[:6]}…)")
-    return errs, len(nums)
+            close(cur)
+            page = m.group(1).strip()
+            if re.search(r"\d-\d", page):
+                errs.append(f"{base}:{lineno}: range tag uses ASCII hyphen; use en dash – (U+2013)")
+            cur = [lineno, page, False, False, False]
+            nunits += 1
+            awaiting_ar = True
+            continue
+        if line.startswith("> "):
+            if cur and awaiting_ar:
+                cur[2] = True; awaiting_ar = False
+            continue
+        if line.startswith("*Notes:*") or line.startswith(("# ", "## ")):
+            continue
+        if cur is not None:                       # a translation paragraph
+            if BENGALI.search(line):
+                cur[4] = True
+            else:
+                cur[3] = True
+    close(cur)
+    return errs, nunits
 
 
 def main():
