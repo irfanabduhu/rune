@@ -14,7 +14,7 @@ parses the shamelaweave markdown shape (## optional subheading / **[n]** ⟨صP�
 
 No external assets, no dependencies — everything is inlined so the file works offline.
 """
-import sys, os, re, glob, html, json
+import sys, os, re, glob, html
 
 
 # ---------- markdown parsing (specialised to the shamelaweave format) ----------
@@ -380,7 +380,7 @@ def build(book_dir, out_path):
     with open(out_path, "w", encoding="utf-8") as fh:
         fh.write(html_doc)
     units = sum(1 for ch in chapters for b in ch["blocks"] if b["kind"] == "unit")
-    return len(chapters), units, len(html_doc)
+    return len(chapters), units, len(html_doc.encode("utf-8"))
 
 
 def main():

@@ -24,6 +24,8 @@ def check_file(path):
             nums.append(int(m.group(1)))
             if not m.group(2):
                 errs.append(f"{base}:{lineno}: unit [{m.group(1)}] missing ⟨ص…⟩ page tag")
+            elif re.search(r"\d-\d", m.group(2)):
+                errs.append(f"{base}:{lineno}: unit [{m.group(1)}] range tag uses ASCII hyphen; use en dash – (U+2013)")
     expected = list(range(1, len(nums) + 1))
     if nums != expected:
         errs.append(f"{base}: units not contiguous 1..{len(nums)} (got {nums[:6]}…)")
